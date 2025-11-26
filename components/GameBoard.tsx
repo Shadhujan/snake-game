@@ -20,23 +20,26 @@ const TICK_RATE = 150
 
 export default function GameBoard({ gameId, playerId, isHost, code }: GameBoardProps) {
   // Game State
-  const [snake1, setSnake1] = useState<Point[]>([{ x: 2, y: 10 }]) // Host starts left
-  const [snake2, setSnake2] = useState<Point[]>([{ x: 17, y: 10 }]) // P2 starts right
+  const [snake1, setSnake1] = useState<Point[]>([{ x: 2, y: 5 }]) // Host starts top-left
+  const [snake2, setSnake2] = useState<Point[]>([{ x: 17, y: 14 }]) // P2 starts bottom-right
   const [direction1, setDirection1] = useState<Direction>('RIGHT')
   const [direction2, setDirection2] = useState<Direction>('LEFT')
   const [food, setFood] = useState<Point>({ x: 10, y: 10 })
   const [score, setScore] = useState({ p1: 0, p2: 0 })
   const [gameOver, setGameOver] = useState(false)
   const [winner, setWinner] = useState<string | null>(null)
+  const [isStarting, setIsStarting] = useState(true)
+  const [countdown, setCountdown] = useState(3)
   
   // Refs for state access in interval/listeners without dependencies
   const gameStateRef = useRef({
-    snake1: [{ x: 2, y: 10 }],
-    snake2: [{ x: 17, y: 10 }],
+    snake1: [{ x: 2, y: 5 }],
+    snake2: [{ x: 17, y: 14 }],
     direction1: 'RIGHT' as Direction,
     direction2: 'LEFT' as Direction,
     food: { x: 10, y: 10 },
     gameOver: false,
+    isStarting: true,
     inputQueue: [] as Direction[] // Input buffering
   })
 
@@ -48,7 +51,8 @@ export default function GameBoard({ gameId, playerId, isHost, code }: GameBoardP
     gameStateRef.current.direction2 = direction2
     gameStateRef.current.food = food
     gameStateRef.current.gameOver = gameOver
-  }, [snake1, snake2, direction1, direction2, food, gameOver])
+    gameStateRef.current.isStarting = isStarting
+  }, [snake1, snake2, direction1, direction2, food, gameOver, isStarting])
 
   const channelRef = useRef<any>(null)
 
@@ -131,9 +135,28 @@ export default function GameBoard({ gameId, playerId, isHost, code }: GameBoardP
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isHost])
 
+  // Countdown Effect
+  useEffect(() => {
+    if (!isStarting) return
+
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          setIsStarting(false)
+          gameStateRef.current.isStarting = false
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [isStarting])
+
   // Game Loop
   useEffect(() => {
-    if (gameOver) return
+    if (gameOver || isStarting) return
 
     const moveSnake = (snake: Point[], dir: Direction): Point => {
       const head = { ...snake[0] }
@@ -156,7 +179,7 @@ export default function GameBoard({ gameId, playerId, isHost, code }: GameBoardP
 
     const tick = setInterval(() => {
       const state = gameStateRef.current
-      if (state.gameOver) return
+      if (state.gameOver || state.isStarting || state.isStarting === undefined) return
 
       // Process Input Queue (Buffering)
       if (state.inputQueue.length > 0) {
@@ -286,7 +309,7 @@ export default function GameBoard({ gameId, playerId, isHost, code }: GameBoardP
     }, TICK_RATE)
 
     return () => clearInterval(tick)
-  }, [gameOver, isHost, playerId, code])
+  }, [gameOver, isHost, playerId, code, isStarting])
 
   const handleGameOver = async (winnerId: string) => {
     setGameOver(true)
@@ -386,6 +409,15 @@ export default function GameBoard({ gameId, playerId, isHost, code }: GameBoardP
             >
               PLAY AGAIN
             </button>
+          </div>
+        )}
+
+        {/* Countdown Overlay */}
+        {isStarting && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className="text-8xl font-bold text-white animate-bounce">
+              {countdown}
+            </div>
           </div>
         )}
       </div>

@@ -44,15 +44,9 @@ export default function Lobby({ onGameStart }: LobbyProps) {
     // Subscribe to changes for this game
     const channel = supabase
       .channel(`game:${code}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'games',
-        filter: `id=eq.${data.id}`
-      }, (payload: any) => {
-        const newGame = payload.new
-        if (newGame.status === 'playing' && newGame.player2_id) {
-          onGameStart(newGame.id, playerId, true, code)
+      .on('broadcast', { event: 'player-joined' }, ({ payload }) => {
+        if (payload.gameId === data.id) {
+          onGameStart(data.id, playerId, true, code)
         }
       })
       .subscribe(async (status) => {
@@ -104,7 +98,19 @@ export default function Lobby({ onGameStart }: LobbyProps) {
       return
     }
 
-    onGameStart(game.id, playerId, false, game.code)
+    // Broadcast join event
+    const channel = supabase.channel(`game:${game.code}`)
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.send({
+          type: 'broadcast',
+          event: 'player-joined',
+          payload: { gameId: game.id }
+        })
+        supabase.removeChannel(channel)
+        onGameStart(game.id, playerId, false, game.code)
+      }
+    })
   }
 
   if (mode === 'waiting') {
